@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>농지의 QR 생성기</title>
-<meta name="description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f5eff">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="농지의 QR 생성기">
 <meta property="og:title" content="농지의 QR 생성기">
-<meta property="og:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta property="og:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta property="og:url" content="https://jinhong-lee.github.io/qr-label-maker/">
 <meta property="og:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="농지의 QR 생성기">
-<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta name="twitter:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <style>
   :root {
@@ -116,7 +116,7 @@ let COLS, ROWS, PER_PAGE, LABEL_W, LABEL_H, PAD, QR_SIZE, TEXT_TOP, OFFSET_X, OF
 
 function layout() {
   LABEL_W = LABEL_W_MM; LABEL_H = LABEL_H_MM;    // 라벨끼리 붙여서 배치(구분선 없음)
-  COLS = Math.floor((A4_W - MARGIN * 2) / LABEL_W);
+  COLS = 10;                                       // 한 줄 10개 고정, 가로 가운데 정렬
   ROWS = Math.floor((A4_H - MARGIN * 2) / LABEL_H);
   PER_PAGE = COLS * ROWS;
   PAD = LABEL_W * 0.045;                           // 안쪽 여백 — 이웃 라벨과의 흰 간격 역할

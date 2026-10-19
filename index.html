@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>농지의 QR 생성기</title>
-<meta name="description" content="시리얼 번호만 붙여넣으면 2.67 × 3cm QR 라벨을 한 번에. A4 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f5eff">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="농지의 QR 생성기">
 <meta property="og:title" content="농지의 QR 생성기">
-<meta property="og:description" content="시리얼 번호만 붙여넣으면 2.67 × 3cm QR 라벨을 한 번에. A4 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta property="og:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta property="og:url" content="https://jinhong-lee.github.io/qr-label-maker/">
 <meta property="og:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="농지의 QR 생성기">
-<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 2.67 × 3cm QR 라벨을 한 번에. A4 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta name="twitter:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <style>
   :root {
@@ -47,7 +47,10 @@
   .msg.warn { background: var(--warn-bg); color: var(--warn); }
   .msg.err { background: var(--err-bg); color: var(--err); }
   .opts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; font-size: 13px; }
-  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .opts { align-items: center; }
+  .opts label { display: flex; align-items: center; gap: 6px; }
+  .opts select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+  .size-info { color: var(--sub); font-size: 12px; }
   .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
   button { font: inherit; font-weight: 600; border-radius: 8px; padding: 12px 16px; cursor: pointer; border: 1px solid transparent; }
   .primary { background: var(--accent); color: #fff; }
@@ -68,7 +71,7 @@
 <body>
 <div class="wrap">
   <h1>농지의 QR 생성기</h1>
-  <p class="lead">시리얼 번호를 붙여넣으면 2.67 × 3cm 라벨(QR + 번호)을 한 번에 만듭니다.</p>
+  <p class="lead">시리얼 번호를 붙여넣으면 QR + 번호 라벨을 A4 한 장에 맞춰 한 번에 만듭니다.</p>
 
   <div class="grid">
     <div class="card">
@@ -80,7 +83,12 @@
       <div id="msgs"></div>
 
       <div class="opts">
-        <label><input type="checkbox" id="cutline" checked> 재단선 표시</label>
+        <label>한 줄에
+          <select id="cols">
+            <option>8</option><option>9</option><option selected>10</option><option>11</option><option>12</option>
+          </select>
+          개</label>
+        <span class="size-info" id="sizeInfo"></span>
       </div>
 
       <div class="actions">
@@ -93,7 +101,7 @@
     <div class="card">
       <div class="preview-head">
         <h2>미리보기</h2>
-        <span>실제 인쇄 크기: 가로 2.67cm × 세로 3cm</span>
+        <span id="previewSize"></span>
       </div>
       <div id="preview"><div class="empty">왼쪽에 시리얼 번호를 붙여넣으면 여기에 라벨이 표시됩니다.</div></div>
     </div>
@@ -104,24 +112,30 @@
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/jszip.min.js"></script>
 <script>
-// ===== 라벨 규격 (mm) =====
-const LABEL_W = 26.7, LABEL_H = 30;
-const PAD = 1.2;                      // 라벨 안쪽 여백
-const QR_SIZE = LABEL_W - PAD * 2;    // 24.3mm 정사각
-const TEXT_TOP = PAD + QR_SIZE;       // 텍스트 영역 시작
-const DPI = 600;                      // 출력 해상도
+// ===== 라벨 규격 (mm) — 한 줄 개수에 맞춰 자동 계산, 비율은 2.67:3 유지 =====
+const RATIO = 30 / 26.7;
+const A4_W = 210, A4_H = 297, MARGIN = 5;   // 프린터 인쇄 불가 영역 고려한 여백
+const DPI = 600;
 const PX = mm => Math.round(mm / 25.4 * DPI);
+let COLS, ROWS, PER_PAGE, LABEL_W, LABEL_H, PAD, QR_SIZE, TEXT_TOP, OFFSET_X, OFFSET_Y;
 
-// ===== A4 배치 (mm) =====
-const A4_W = 210, A4_H = 297, MARGIN = 10, GAP = 2;
-const COLS = Math.floor((A4_W - MARGIN * 2 + GAP) / (LABEL_W + GAP));
-const ROWS = Math.floor((A4_H - MARGIN * 2 + GAP) / (LABEL_H + GAP));
-const PER_PAGE = COLS * ROWS;
-// 배치 전체를 가운데 정렬
-const OFFSET_X = (A4_W - (COLS * LABEL_W + (COLS - 1) * GAP)) / 2;
-const OFFSET_Y = (A4_H - (ROWS * LABEL_H + (ROWS - 1) * GAP)) / 2;
+function layout() {
+  COLS = Number($('cols').value);
+  LABEL_W = (A4_W - MARGIN * 2) / COLS;           // 라벨끼리 붙여서 배치(구분선 없음)
+  LABEL_H = LABEL_W * RATIO;
+  ROWS = Math.floor((A4_H - MARGIN * 2) / LABEL_H);
+  PER_PAGE = COLS * ROWS;
+  PAD = LABEL_W * 0.045;                           // 안쪽 여백 — 이웃 라벨과의 흰 간격 역할
+  QR_SIZE = LABEL_W - PAD * 2;
+  TEXT_TOP = PAD + QR_SIZE;
+  OFFSET_X = (A4_W - COLS * LABEL_W) / 2;
+  OFFSET_Y = (A4_H - ROWS * LABEL_H) / 2;
+  const cm = v => (v / 10).toFixed(2).replace(/0$/, '');
+  $('sizeInfo').textContent = `라벨 ${cm(LABEL_W)} × ${cm(LABEL_H)}cm · 한 장 ${PER_PAGE}개`;
+  $('previewSize').textContent = `실제 인쇄 크기: 가로 ${cm(LABEL_W)}cm × 세로 ${cm(LABEL_H)}cm`;
+}
 
-const MAX_MODULES = 57; // 이보다 촘촘하면 2.4cm에서 스캔이 어려움(모듈 0.43mm 미만)
+const MIN_MODULE_MM = 0.33; // QR 한 칸이 이보다 작으면 휴대폰 스캔이 어려움
 
 const $ = id => document.getElementById(id);
 let serials = [];
@@ -162,10 +176,10 @@ function drawLabel(text) {
   // 텍스트 — 라벨 폭에 맞게 자동 축소
   const zoneTop = PX(TEXT_TOP), zoneH = c.height - zoneTop;
   const maxW = c.width - PX(PAD) * 2;
-  let fs = PX(2.6);
+  let fs = PX(LABEL_H * 0.087);
   const font = s => `${s}px Arial, Helvetica, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
   ctx.font = font(fs);
-  while (ctx.measureText(text).width > maxW && fs > PX(1.2)) { fs -= 2; ctx.font = font(fs); }
+  while (ctx.measureText(text).width > maxW && fs > PX(LABEL_H * 0.04)) { fs -= 2; ctx.font = font(fs); }
   ctx.fillStyle = '#222';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, c.width / 2, zoneTop + zoneH / 2);
@@ -174,6 +188,7 @@ function drawLabel(text) {
 }
 
 function render() {
+  layout();
   serials = parse($('input').value);
   const count = serials.length;
   $('count').textContent = count;
@@ -198,11 +213,11 @@ function render() {
       const { canvas, modules, tooSmall } = drawLabel(s);
       canvas.title = s;
       box.appendChild(canvas);
-      if (modules > MAX_MODULES) dense.push(s);
+      if (QR_SIZE / modules < MIN_MODULE_MM) dense.push(s);
       if (tooSmall) longText.push(s);
     });
     pv.appendChild(box);
-    if (dense.length) msgs.push(['err', `내용이 너무 길어 QR이 촘촘한 번호가 ${dense.length}개 있습니다. 2.67cm 크기에서는 스캔이 안 될 수 있어요.`]);
+    if (dense.length) msgs.push(['err', `내용이 너무 길어 QR이 촘촘한 번호가 ${dense.length}개 있습니다. 이 라벨 크기에서는 스캔이 안 될 수 있어요.`]);
     if (longText.length) msgs.push(['warn', `번호가 길어 글자가 라벨 폭을 넘는 항목이 ${longText.length}개 있습니다.`]);
   }
   $('msgs').innerHTML = msgs.map(([t, m]) => `<div class="msg ${t}">${m}</div>`).join('');
@@ -226,14 +241,12 @@ $('btnPdf').addEventListener('click', async () => {
   try {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    const cut = $('cutline').checked;
     serials.forEach((s, i) => {
       const k = i % PER_PAGE;
       if (i > 0 && k === 0) pdf.addPage();
-      const x = OFFSET_X + (k % COLS) * (LABEL_W + GAP);
-      const y = OFFSET_Y + Math.floor(k / COLS) * (LABEL_H + GAP);
+      const x = OFFSET_X + (k % COLS) * LABEL_W;
+      const y = OFFSET_Y + Math.floor(k / COLS) * LABEL_H;
       pdf.addImage(drawLabel(s).canvas.toDataURL('image/png'), 'PNG', x, y, LABEL_W, LABEL_H, undefined, 'FAST');
-      if (cut) { pdf.setDrawColor(190); pdf.setLineWidth(0.1); pdf.rect(x, y, LABEL_W, LABEL_H); }
     });
     pdf.save(`QR라벨_${serials.length}개_${stamp()}.pdf`);
   } catch (e) {
@@ -268,6 +281,7 @@ $('btnZip').addEventListener('click', async () => {
 });
 
 let t;
+$('cols').addEventListener('change', render);
 $('input').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 250); });
 render();
 </script>

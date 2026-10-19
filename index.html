@@ -46,11 +46,6 @@
   .msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
   .msg.warn { background: var(--warn-bg); color: var(--warn); }
   .msg.err { background: var(--err-bg); color: var(--err); }
-  .opts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; font-size: 13px; }
-  .opts { align-items: center; }
-  .opts label { display: flex; align-items: center; gap: 6px; }
-  .opts select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
-  .size-info { color: var(--sub); font-size: 12px; }
   .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
   button { font: inherit; font-weight: 600; border-radius: 8px; padding: 12px 16px; cursor: pointer; border: 1px solid transparent; }
   .primary { background: var(--accent); color: #fff; }
@@ -58,8 +53,6 @@
   .secondary { background: #fff; color: var(--ink); border-color: var(--line); }
   .secondary:hover:not(:disabled) { background: #f2f3f5; }
   button:disabled { opacity: .4; cursor: default; }
-  .print-note { font-size: 12px; color: var(--sub); margin: 4px 0 0; }
-  .print-note b { color: var(--ink); }
   .preview-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   .preview-head h2 { font-size: 15px; margin: 0; }
   .preview-head span { color: var(--sub); font-size: 12px; }
@@ -84,13 +77,8 @@
       <p class="count">라벨 <b id="count">0</b>개 · A4 <span id="pages">0</span>장</p>
       <div id="msgs"></div>
 
-      <div class="opts">
-        <span class="size-info" id="sizeInfo"></span>
-      </div>
-
       <div class="actions">
         <button class="primary" id="btnPdf" disabled>인쇄용 PDF 받기</button>
-        <p class="print-note">인쇄할 때 배율을 <b>"실제 크기(100%)"</b>로 설정하세요. "용지에 맞춤"으로 인쇄하면 크기가 바뀝니다.</p>
         <button class="secondary" id="btnZip" disabled>PNG 이미지 묶음(ZIP) 받기</button>
       </div>
     </div>
@@ -128,7 +116,6 @@ function layout() {
   OFFSET_X = (A4_W - (COLS * LABEL_W + (COLS - 1) * GAP)) / 2;
   OFFSET_Y = (A4_H - (ROWS * LABEL_H + (ROWS - 1) * GAP)) / 2;
   const cm = v => String(v / 10);
-  $('sizeInfo').textContent = `라벨 ${cm(LABEL_W)} × ${cm(LABEL_H)}cm · A4 한 장에 ${COLS}개 × ${ROWS}줄 = ${PER_PAGE}개`;
   $('previewSize').textContent = `실제 인쇄 크기: 가로 ${cm(LABEL_W)}cm × 세로 ${cm(LABEL_H)}cm`;
 }
 

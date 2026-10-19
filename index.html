@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR 라벨 생성기</title>
+<style>
+  :root {
+    --ink: #0f0f10; --sub: #6b7076; --line: #dbdcdf; --bg: #f5f6f7;
+    --card: #fff; --accent: #1f5eff; --warn-bg: #fff6e0; --warn: #8a5a00;
+    --err-bg: #feecec; --err: #c41d1d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--sub); margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  label.t { display: block; font-weight: 600; margin-bottom: 6px; }
+  textarea { width: 100%; height: 320px; resize: vertical; padding: 12px; border: 1px solid var(--line);
+    border-radius: 8px; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .hint { color: var(--sub); font-size: 12px; margin: 6px 0 0; }
+  .count { font-size: 13px; margin: 14px 0 0; }
+  .count b { font-size: 18px; }
+  .msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .opts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; font-size: 13px; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+  button { font: inherit; font-weight: 600; border-radius: 8px; padding: 12px 16px; cursor: pointer; border: 1px solid transparent; }
+  .primary { background: var(--accent); color: #fff; }
+  .primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .secondary { background: #fff; color: var(--ink); border-color: var(--line); }
+  .secondary:hover:not(:disabled) { background: #f2f3f5; }
+  button:disabled { opacity: .4; cursor: default; }
+  .print-note { font-size: 12px; color: var(--sub); margin: 4px 0 0; }
+  .print-note b { color: var(--ink); }
+  .preview-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .preview-head h2 { font-size: 15px; margin: 0; }
+  .preview-head span { color: var(--sub); font-size: 12px; }
+  .labels { display: flex; flex-wrap: wrap; gap: 10px; }
+  .labels canvas { width: 107px; height: 120px; /* 26.7×30mm 비율 */ border: 1px solid var(--line); background: #fff; }
+  .empty { color: var(--sub); text-align: center; padding: 80px 16px; border: 1px dashed var(--line); border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>QR 라벨 생성기</h1>
+  <p class="lead">시리얼 번호를 붙여넣으면 2.67 × 3cm 라벨(QR + 번호)을 한 번에 만듭니다.</p>
+
+  <div class="grid">
+    <div class="card">
+      <label class="t" for="input">시리얼 번호 (한 줄에 하나)</label>
+      <textarea id="input" spellcheck="false" placeholder="SP2210260051&#10;SP2210260052&#10;SP2210260053"></textarea>
+      <p class="hint">엑셀 열을 복사해서 그대로 붙여넣어도 됩니다. 빈 줄은 무시돼요.</p>
+
+      <p class="count">라벨 <b id="count">0</b>개 · A4 <span id="pages">0</span>장</p>
+      <div id="msgs"></div>
+
+      <div class="opts">
+        <label><input type="checkbox" id="cutline" checked> 재단선 표시</label>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="btnPdf" disabled>인쇄용 PDF 받기</button>
+        <p class="print-note">인쇄할 때 배율을 <b>"실제 크기(100%)"</b>로 설정하세요. "용지에 맞춤"으로 인쇄하면 크기가 바뀝니다.</p>
+        <button class="secondary" id="btnZip" disabled>PNG 이미지 묶음(ZIP) 받기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="preview-head">
+        <h2>미리보기</h2>
+        <span>실제 인쇄 크기: 가로 2.67cm × 세로 3cm</span>
+      </div>
+      <div id="preview"><div class="empty">왼쪽에 시리얼 번호를 붙여넣으면 여기에 라벨이 표시됩니다.</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="lib/qrcode.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script>
+// ===== 라벨 규격 (mm) =====
+const LABEL_W = 26.7, LABEL_H = 30;
+const PAD = 1.2;                      // 라벨 안쪽 여백
+const QR_SIZE = LABEL_W - PAD * 2;    // 24.3mm 정사각
+const TEXT_TOP = PAD + QR_SIZE;       // 텍스트 영역 시작
+const DPI = 600;                      // 출력 해상도
+const PX = mm => Math.round(mm / 25.4 * DPI);
+
+// ===== A4 배치 (mm) =====
+const A4_W = 210, A4_H = 297, MARGIN = 10, GAP = 2;
+const COLS = Math.floor((A4_W - MARGIN * 2 + GAP) / (LABEL_W + GAP));
+const ROWS = Math.floor((A4_H - MARGIN * 2 + GAP) / (LABEL_H + GAP));
+const PER_PAGE = COLS * ROWS;
+// 배치 전체를 가운데 정렬
+const OFFSET_X = (A4_W - (COLS * LABEL_W + (COLS - 1) * GAP)) / 2;
+const OFFSET_Y = (A4_H - (ROWS * LABEL_H + (ROWS - 1) * GAP)) / 2;
+
+const MAX_MODULES = 57; // 이보다 촘촘하면 2.4cm에서 스캔이 어려움(모듈 0.43mm 미만)
+
+const $ = id => document.getElementById(id);
+let serials = [];
+
+function parse(text) {
+  return text.split(/\r?\n/)
+    .map(line => line.split('\t')[0].trim())   // 엑셀 여러 열 복사 시 첫 열만
+    .filter(Boolean);
+}
+
+function makeQR(text) {
+  const qr = qrcode(0, 'M');                    // 버전 자동, 오류정정 M(15%)
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+  qr.addData(text, 'Byte');
+  qr.make();
+  return qr;
+}
+
+function drawLabel(text) {
+  const c = document.createElement('canvas');
+  c.width = PX(LABEL_W); c.height = PX(LABEL_H);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+
+  // QR — 모듈을 정수 픽셀로 맞춰 선명하게
+  const qr = makeQR(text);
+  const n = qr.getModuleCount();
+  const area = PX(QR_SIZE);
+  const cell = Math.floor(area / n);
+  const size = cell * n;
+  const x0 = Math.round((c.width - size) / 2);
+  const y0 = PX(PAD) + Math.round((area - size) / 2);
+  ctx.fillStyle = '#000';
+  for (let r = 0; r < n; r++)
+    for (let col = 0; col < n; col++)
+      if (qr.isDark(r, col)) ctx.fillRect(x0 + col * cell, y0 + r * cell, cell, cell);
+
+  // 텍스트 — 라벨 폭에 맞게 자동 축소
+  const zoneTop = PX(TEXT_TOP), zoneH = c.height - zoneTop;
+  const maxW = c.width - PX(PAD) * 2;
+  let fs = PX(2.6);
+  const font = s => `${s}px Arial, Helvetica, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  ctx.font = font(fs);
+  while (ctx.measureText(text).width > maxW && fs > PX(1.2)) { fs -= 2; ctx.font = font(fs); }
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, zoneTop + zoneH / 2);
+
+  return { canvas: c, modules: n, tooSmall: ctx.measureText(text).width > maxW };
+}
+
+function render() {
+  serials = parse($('input').value);
+  const count = serials.length;
+  $('count').textContent = count;
+  $('pages').textContent = count ? Math.ceil(count / PER_PAGE) : 0;
+  $('btnPdf').disabled = $('btnZip').disabled = !count;
+
+  const msgs = [];
+  const seen = new Map();
+  serials.forEach(s => seen.set(s, (seen.get(s) || 0) + 1));
+  const dups = [...seen].filter(([, v]) => v > 1);
+  if (dups.length)
+    msgs.push(['warn', `중복된 번호가 ${dups.length}개 있습니다 (${dups.slice(0, 3).map(d => d[0]).join(', ')}${dups.length > 3 ? ' 외' : ''}). 같은 라벨이 여러 장 출력됩니다.`]);
+
+  const pv = $('preview');
+  pv.innerHTML = '';
+  if (!count) {
+    pv.innerHTML = '<div class="empty">왼쪽에 시리얼 번호를 붙여넣으면 여기에 라벨이 표시됩니다.</div>';
+  } else {
+    const box = document.createElement('div'); box.className = 'labels';
+    const dense = [], longText = [];
+    serials.forEach(s => {
+      const { canvas, modules, tooSmall } = drawLabel(s);
+      canvas.title = s;
+      box.appendChild(canvas);
+      if (modules > MAX_MODULES) dense.push(s);
+      if (tooSmall) longText.push(s);
+    });
+    pv.appendChild(box);
+    if (dense.length) msgs.push(['err', `내용이 너무 길어 QR이 촘촘한 번호가 ${dense.length}개 있습니다. 2.67cm 크기에서는 스캔이 안 될 수 있어요.`]);
+    if (longText.length) msgs.push(['warn', `번호가 길어 글자가 라벨 폭을 넘는 항목이 ${longText.length}개 있습니다.`]);
+  }
+  $('msgs').innerHTML = msgs.map(([t, m]) => `<div class="msg ${t}">${m}</div>`).join('');
+}
+
+function busy(btn, on, label) {
+  btn.disabled = on;
+  if (on) { btn.dataset.label = btn.textContent; btn.textContent = label; }
+  else btn.textContent = btn.dataset.label;
+}
+
+function stamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+$('btnPdf').addEventListener('click', async () => {
+  const btn = $('btnPdf');
+  busy(btn, true, 'PDF 만드는 중…');
+  await new Promise(r => setTimeout(r, 20));
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const cut = $('cutline').checked;
+    serials.forEach((s, i) => {
+      const k = i % PER_PAGE;
+      if (i > 0 && k === 0) pdf.addPage();
+      const x = OFFSET_X + (k % COLS) * (LABEL_W + GAP);
+      const y = OFFSET_Y + Math.floor(k / COLS) * (LABEL_H + GAP);
+      pdf.addImage(drawLabel(s).canvas.toDataURL('image/png'), 'PNG', x, y, LABEL_W, LABEL_H, undefined, 'FAST');
+      if (cut) { pdf.setDrawColor(190); pdf.setLineWidth(0.1); pdf.rect(x, y, LABEL_W, LABEL_H); }
+    });
+    pdf.save(`QR라벨_${serials.length}개_${stamp()}.pdf`);
+  } catch (e) {
+    alert('PDF를 만들지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.\n' + e.message);
+  }
+  busy(btn, false);
+});
+
+$('btnZip').addEventListener('click', async () => {
+  const btn = $('btnZip');
+  busy(btn, true, 'ZIP 만드는 중…');
+  try {
+    const zip = new JSZip();
+    const used = new Map();
+    for (const s of serials) {
+      const safe = s.replace(/[\\/:*?"<>|]/g, '_');
+      const n = (used.get(safe) || 0) + 1; used.set(safe, n);
+      const name = n === 1 ? `${safe}.png` : `${safe}_${n}.png`;
+      const blob = await new Promise(r => drawLabel(s).canvas.toBlob(r, 'image/png'));
+      zip.file(name, blob);
+    }
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = `QR라벨_${serials.length}개_${stamp()}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) {
+    alert('ZIP을 만들지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.\n' + e.message);
+  }
+  busy(btn, false);
+});
+
+let t;
+$('input').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 250); });
+render();
+</script>
+</body>
+</html>

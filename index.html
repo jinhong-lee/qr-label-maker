@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>농지의 QR 생성기</title>
-<meta name="description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f5eff">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="농지의 QR 생성기">
 <meta property="og:title" content="농지의 QR 생성기">
-<meta property="og:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta property="og:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta property="og:url" content="https://jinhong-lee.github.io/qr-label-maker/">
 <meta property="og:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="농지의 QR 생성기">
-<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. A4 한 장에 한 줄 10개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
+<meta name="twitter:description" content="시리얼 번호만 붙여넣으면 QR 라벨을 한 번에. 1.7 × 1.9cm 라벨로 A4 한 장에 165개씩, 인쇄용 PDF와 PNG 이미지로 바로 받을 수 있어요.">
 <meta name="twitter:image" content="https://jinhong-lee.github.io/qr-label-maker/og-image.png">
 <style>
   :root {
@@ -83,11 +83,6 @@
       <div id="msgs"></div>
 
       <div class="opts">
-        <label>한 줄에
-          <select id="cols">
-            <option>8</option><option>9</option><option selected>10</option><option>11</option><option>12</option>
-          </select>
-          개</label>
         <span class="size-info" id="sizeInfo"></span>
       </div>
 
@@ -112,17 +107,16 @@
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/jszip.min.js"></script>
 <script>
-// ===== 라벨 규격 (mm) — 한 줄 개수에 맞춰 자동 계산, 비율은 2.67:3 유지 =====
-const RATIO = 30 / 26.7;
+// ===== 라벨 규격 (mm) — 고정 크기 1.7 × 1.9cm =====
+const LABEL_W_MM = 17, LABEL_H_MM = 19;
 const A4_W = 210, A4_H = 297, MARGIN = 5;   // 프린터 인쇄 불가 영역 고려한 여백
 const DPI = 600;
 const PX = mm => Math.round(mm / 25.4 * DPI);
 let COLS, ROWS, PER_PAGE, LABEL_W, LABEL_H, PAD, QR_SIZE, TEXT_TOP, OFFSET_X, OFFSET_Y;
 
 function layout() {
-  COLS = Number($('cols').value);
-  LABEL_W = (A4_W - MARGIN * 2) / COLS;           // 라벨끼리 붙여서 배치(구분선 없음)
-  LABEL_H = LABEL_W * RATIO;
+  LABEL_W = LABEL_W_MM; LABEL_H = LABEL_H_MM;    // 라벨끼리 붙여서 배치(구분선 없음)
+  COLS = Math.floor((A4_W - MARGIN * 2) / LABEL_W);
   ROWS = Math.floor((A4_H - MARGIN * 2) / LABEL_H);
   PER_PAGE = COLS * ROWS;
   PAD = LABEL_W * 0.045;                           // 안쪽 여백 — 이웃 라벨과의 흰 간격 역할
@@ -130,8 +124,8 @@ function layout() {
   TEXT_TOP = PAD + QR_SIZE;
   OFFSET_X = (A4_W - COLS * LABEL_W) / 2;
   OFFSET_Y = (A4_H - ROWS * LABEL_H) / 2;
-  const cm = v => (v / 10).toFixed(2).replace(/0$/, '');
-  $('sizeInfo').textContent = `라벨 ${cm(LABEL_W)} × ${cm(LABEL_H)}cm · 한 장 ${PER_PAGE}개`;
+  const cm = v => String(v / 10);
+  $('sizeInfo').textContent = `라벨 ${cm(LABEL_W)} × ${cm(LABEL_H)}cm · A4 한 장에 ${COLS}개 × ${ROWS}줄 = ${PER_PAGE}개`;
   $('previewSize').textContent = `실제 인쇄 크기: 가로 ${cm(LABEL_W)}cm × 세로 ${cm(LABEL_H)}cm`;
 }
 
@@ -281,7 +275,6 @@ $('btnZip').addEventListener('click', async () => {
 });
 
 let t;
-$('cols').addEventListener('change', render);
 $('input').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 250); });
 render();
 </script>

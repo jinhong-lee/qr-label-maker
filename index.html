@@ -63,8 +63,10 @@
   .preview-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   .preview-head h2 { font-size: 15px; margin: 0; }
   .preview-head span { color: var(--sub); font-size: 12px; }
-  .labels { display: flex; flex-wrap: wrap; gap: 10px; }
-  .labels canvas { width: 107px; height: 120px; /* 26.7×30mm 비율 */ border: 1px solid var(--line); background: #fff; }
+  .pages { display: flex; flex-direction: column; gap: 20px; background: #e9eaec; margin: 0 -20px -20px; padding: 20px; border-radius: 0 0 12px 12px; }
+  .page-no { font-size: 12px; color: var(--sub); margin: 0 0 6px; }
+  .sheet { position: relative; width: 100%; aspect-ratio: 210 / 297; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .sheet canvas { position: absolute; }
   .empty { color: var(--sub); text-align: center; padding: 80px 16px; border: 1px dashed var(--line); border-radius: 8px; }
 </style>
 </head>
@@ -110,20 +112,21 @@
 // ===== 라벨 규격 (mm) — 고정 크기 1.7 × 1.9cm =====
 const LABEL_W_MM = 17, LABEL_H_MM = 19;
 const A4_W = 210, A4_H = 297, MARGIN = 5;   // 프린터 인쇄 불가 영역 고려한 여백
+const GAP = 3;                               // 라벨 사이 간격(가로·세로 동일)
 const DPI = 600;
 const PX = mm => Math.round(mm / 25.4 * DPI);
 let COLS, ROWS, PER_PAGE, LABEL_W, LABEL_H, PAD, QR_SIZE, TEXT_TOP, OFFSET_X, OFFSET_Y;
 
 function layout() {
   LABEL_W = LABEL_W_MM; LABEL_H = LABEL_H_MM;    // 라벨끼리 붙여서 배치(구분선 없음)
-  COLS = 10;                                       // 한 줄 10개 고정, 가로 가운데 정렬
-  ROWS = Math.floor((A4_H - MARGIN * 2) / LABEL_H);
+  COLS = 10;                                       // 한 줄 10개 고정, 가운데 정렬
+  ROWS = Math.floor((A4_H - MARGIN * 2 + GAP) / (LABEL_H + GAP));
   PER_PAGE = COLS * ROWS;
   PAD = LABEL_W * 0.045;                           // 안쪽 여백 — 이웃 라벨과의 흰 간격 역할
   QR_SIZE = LABEL_W - PAD * 2;
   TEXT_TOP = PAD + QR_SIZE;
-  OFFSET_X = (A4_W - COLS * LABEL_W) / 2;
-  OFFSET_Y = (A4_H - ROWS * LABEL_H) / 2;
+  OFFSET_X = (A4_W - (COLS * LABEL_W + (COLS - 1) * GAP)) / 2;
+  OFFSET_Y = (A4_H - (ROWS * LABEL_H + (ROWS - 1) * GAP)) / 2;
   const cm = v => String(v / 10);
   $('sizeInfo').textContent = `라벨 ${cm(LABEL_W)} × ${cm(LABEL_H)}cm · A4 한 장에 ${COLS}개 × ${ROWS}줄 = ${PER_PAGE}개`;
   $('previewSize').textContent = `실제 인쇄 크기: 가로 ${cm(LABEL_W)}cm × 세로 ${cm(LABEL_H)}cm`;
@@ -181,6 +184,11 @@ function drawLabel(text) {
   return { canvas: c, modules: n, tooSmall: ctx.measureText(text).width > maxW };
 }
 
+// 페이지 안 k번째 라벨의 위치(mm) — 미리보기와 PDF가 같은 함수를 씀
+function pos(k) {
+  return { x: OFFSET_X + (k % COLS) * (LABEL_W + GAP), y: OFFSET_Y + Math.floor(k / COLS) * (LABEL_H + GAP) };
+}
+
 function render() {
   layout();
   serials = parse($('input').value);
@@ -201,12 +209,24 @@ function render() {
   if (!count) {
     pv.innerHTML = '<div class="empty">왼쪽에 시리얼 번호를 붙여넣으면 여기에 라벨이 표시됩니다.</div>';
   } else {
-    const box = document.createElement('div'); box.className = 'labels';
+    const box = document.createElement('div'); box.className = 'pages';
+    const total = Math.ceil(count / PER_PAGE);
+    const pct = (v, base) => (v / base * 100) + '%';
+    let sheet;
     const dense = [], longText = [];
-    serials.forEach(s => {
+    serials.forEach((s, i) => {
+      const k = i % PER_PAGE;
+      if (k === 0) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `<p class="page-no">${i / PER_PAGE + 1} / ${total}쪽</p>`;
+        sheet = document.createElement('div'); sheet.className = 'sheet';
+        wrap.appendChild(sheet); box.appendChild(wrap);
+      }
       const { canvas, modules, tooSmall } = drawLabel(s);
+      const { x, y } = pos(k);
       canvas.title = s;
-      box.appendChild(canvas);
+      Object.assign(canvas.style, { left: pct(x, A4_W), top: pct(y, A4_H), width: pct(LABEL_W, A4_W), height: pct(LABEL_H, A4_H) });
+      sheet.appendChild(canvas);
       if (QR_SIZE / modules < MIN_MODULE_MM) dense.push(s);
       if (tooSmall) longText.push(s);
     });
@@ -238,8 +258,7 @@ $('btnPdf').addEventListener('click', async () => {
     serials.forEach((s, i) => {
       const k = i % PER_PAGE;
       if (i > 0 && k === 0) pdf.addPage();
-      const x = OFFSET_X + (k % COLS) * LABEL_W;
-      const y = OFFSET_Y + Math.floor(k / COLS) * LABEL_H;
+      const { x, y } = pos(k);
       pdf.addImage(drawLabel(s).canvas.toDataURL('image/png'), 'PNG', x, y, LABEL_W, LABEL_H, undefined, 'FAST');
     });
     pdf.save(`QR라벨_${serials.length}개_${stamp()}.pdf`);
